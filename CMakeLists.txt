@@ -1071,6 +1071,7 @@ set(VRPN_SERVER_SOURCES
 	vrpn_Analog_5dtUSB.C
 	vrpn_Analog_Radamec_SPI.C
 	vrpn_Analog_USDigital_A2.C
+	vrpn_Analog_Leptrino.C
 	vrpn_Atmel.C
 	vrpn_BiosciencesTools.C
 	vrpn_Button_NI_DIO24.C
@@ -1180,6 +1181,7 @@ set(VRPN_SERVER_PUBLIC_HEADERS
 	vrpn_Analog_5dtUSB.h
 	vrpn_Analog_Radamec_SPI.h
 	vrpn_Analog_USDigital_A2.h
+	vrpn_Analog_Leptrino.h
 	vrpn_Atmel.h
 	vrpn_BiosciencesTools.h
 	vrpn_Button_NI_DIO24.h

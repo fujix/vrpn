@@ -115,6 +115,7 @@ protected:
     int setup_Button_USB(char *&pch, char *line, FILE * /*config_file*/);
     int setup_Analog_USDigital_A2(char *&pch, char *line,
                                   FILE * /*config_file*/);
+    int setup_Analog_Leptrino(char *& pch, char * line, FILE *);
     int setup_Button_NI_DIO24(char *&pch, char *line, FILE * /*config_file*/);
     int setup_Tracker_PhaseSpace(char *&pch, char *line,
                                  FILE * /*config_file*/);

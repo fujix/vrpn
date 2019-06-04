@@ -17,6 +17,7 @@
 #include "vrpn_Analog_Output.h"      // for vrpn_Analog_Output
 #include "vrpn_Analog_Radamec_SPI.h" // for vrpn_Radamec_SPI
 #include "vrpn_Analog_USDigital_A2.h"
+#include "vrpn_Analog_Leptrino.h"
 #include "vrpn_Atmel.h" // for VRPN_ATMEL_MODE_NA, etc
 #include "vrpn_Auxiliary_Logger.h"
 #include "vrpn_BiosciencesTools.h" // for vrpn_BiosciencesTools
@@ -3360,6 +3361,36 @@ int vrpn_Generic_Server_Object::setup_Analog_USDigital_A2(
 #endif
 } //  setup_USDigital_A2
 
+// ----------------------------------------------------------------------
+
+int vrpn_Generic_Server_Object::setup_Analog_Leptrino(
+	char *&pch, char *line, FILE * /*config_file*/)
+{
+	char deviceName[LINESIZE];
+	int deviceIndex, numArgs;
+
+	VRPN_CONFIG_NEXT();
+	// Get the arguments (class, device_name, device_index)
+	numArgs = sscanf(pch, "%511s%d", deviceName, &deviceIndex);
+	if (numArgs != 2) {
+		fprintf(stderr, "Bad vrpn_Analog_Leptrino line: %s\n", line);
+		return -1;
+	}
+
+	// Make sure the parameters look OK
+	if (deviceIndex < 0 || deviceIndex > 100) {
+		fprintf(stderr,
+			"Invalid device index %d in vrpn_Analog_Leptrino line: %s\n", deviceIndex, line);
+		return -1;
+	}
+	// Open the device
+	if (verbose)
+		printf("Opening vrpn_Analog_Leptrino: %s #%d\n", deviceName, deviceIndex);
+	_devices->add(new vrpn_Analog_Leptrino(deviceName, deviceIndex, connection));
+
+	return 0;
+} //  setup_Leptrino
+
 int vrpn_Generic_Server_Object::setup_Button_NI_DIO24(char *&pch, char *line,
                                                       FILE * /*config_file*/)
 {
@@ -5458,7 +5489,10 @@ vrpn_Generic_Server_Object::vrpn_Generic_Server_Object(
                 else if (VRPN_ISIT("vrpn_Analog_USDigital_A2")) {
                     VRPN_CHECK(setup_Analog_USDigital_A2);
                 }
-                else if (VRPN_ISIT("vrpn_Button_NI_DIO24")) {
+				else if (VRPN_ISIT("vrpn_Analog_Leptrino")) {
+					VRPN_CHECK(setup_Analog_Leptrino);
+				}
+				else if (VRPN_ISIT("vrpn_Button_NI_DIO24")) {
                     VRPN_CHECK(setup_Button_NI_DIO24);
                 }
                 else if (VRPN_ISIT("vrpn_Tracker_PhaseSpace")) {
