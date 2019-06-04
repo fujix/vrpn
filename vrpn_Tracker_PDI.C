@@ -1620,6 +1620,7 @@ vrpn_Tracker_LibertyPDI::vrpn_Tracker_LibertyPDI (const char * name, vrpn_Connec
  	, m_nStylusMap(nStylusMap)
 	, m_nHeaderSize(8)
 	, m_nFrameSize(nStylusMap?40:36)
+	, pMotionBuf{ 0 }
  {
 	    cmd = (char*)(rcmd);
 		register_server_handlers();
@@ -1810,6 +1811,9 @@ BOOL vrpn_Tracker_LibertyPDI::Connect( VOID )
 		}
 		pdiMDat.Append( PDI_MODATA_POS );
 		pdiMDat.Append( PDI_MODATA_QTRN );
+		pdiMDat.Append(PDI_MODATA_TIMESTAMP);
+		pdiMDat.Append(PDI_MODATA_FRAMECOUNT);
+		m_nFrameSize = m_nStylusMap ? 48 : 44;
 		pdiDev.SetSDataList( -1, pdiMDat );
 	
 		pdiDev.SetMetric(TRUE);
@@ -1821,6 +1825,24 @@ BOOL vrpn_Tracker_LibertyPDI::Connect( VOID )
 		pdiDev.SetPnoBuffer( pMotionBuf, VRPN_PDI_BUFFER_SIZE );
 		pLastBuf = 0;
 		dwLastSize = 0;
+    pdiDev.SetBufEnabled(TRUE);
+		
+		// Send sensor serial numbers
+		vrpn_gettimeofday(&timestamp, NULL);
+		LPCSTR whoami = 0;
+		if (pdiDev.WhoAmI(whoami)) {
+			string libertyInfo("[vrpn_Tracker_LibertyPDI]whoami:");
+			libertyInfo += whoami;
+			send_text_message(libertyInfo.c_str(), timestamp, vrpn_TEXT_NORMAL);
+		}
+		INT maxSensors = pdiDev.MaxSensors();
+		for (int i = 1; i <= maxSensors; i++) {
+			if (pdiDev.WhoAmISensor(i, whoami)) {
+				char sensorInfo[256];
+				snprintf(sensorInfo, sizeof sensorInfo, "[vrpn_Tracker_LibertyPDI]whoamisensor:%d=%s", i, whoami);
+				send_text_message(sensorInfo, timestamp, vrpn_TEXT_NORMAL);
+			}
+		}
 
 		bCnxReady = pdiDev.CnxReady();
 	}
@@ -2074,6 +2096,14 @@ BOOL vrpn_Tracker_LibertyPDI::StartCont( VOID )
 	}
 	else
 	{
+		pdiDev.ResetFrameCount();
+		pdiDev.ResetTimeStamp();
+		dwLastFrameCount = 0;
+		pdiDev.ResetFrameCount();
+		pdiDev.ResetTimeStamp();
+		pdiDev.ResetPnoPtr();
+		vrpn_gettimeofday(&liberty_zerotime, NULL);
+
 		isCont = TRUE;
 		dwOverflowCount = 0;
 		bRet = TRUE;
@@ -2126,12 +2156,21 @@ BOOL vrpn_Tracker_LibertyPDI::DisplayCont( timeval ct )
 	}
 	else if (pBuf != pLastBuf) // it wrapped in buffer
 	{
-		if (pLastBuf)
+		if (pLastBuf) {
 			cout << "wrapped\n";
 
+			// tail of buffer
+			size_t tailSize = (pMotionBuf + VRPN_PDI_BUFFER_SIZE - pLastBuf - dwLastSize);
+			if (tailSize > 0) {
+				ParseLibertyFrame(pLastBuf + dwLastSize, tailSize, ct);
+			}
+			ParseLibertyFrame(pMotionBuf, (pBuf - pMotionBuf) + dwSize, ct);
+		} else {
+			// first touch (will drop some frames)
+			ParseLibertyFrame(pBuf, dwSize, ct);
+		}
 		pLastBuf = pBuf;
 		dwLastSize = dwSize;
-		ParseLibertyFrame( pBuf, dwSize, ct );
 		bRet = TRUE;
 	}
 	
@@ -2185,7 +2224,12 @@ VOID vrpn_Tracker_LibertyPDI::ParseLibertyFrame( PBYTE pBuf, DWORD dwSize, timev
 		// Catch command response frames sent when tracker is in continuous mode
 		// and don't parse them but do provide output to the server screen
 		if (ucInitCommand != 'C' && ucInitCommand != 'P'){
-			printf("LibertyPDI: received command %x while in continuous mode, tracker response was %x \r\n", ucInitCommand, ucErrorNum);
+			if (ucInitCommand == 0) {
+				// skip padding at tail of buffer
+			}
+			else {
+				printf("LibertyPDI: received command %x while in continuous mode, tracker response was %x \r\n", ucInitCommand, ucErrorNum);
+			}
 		}
 		else{
 			if (m_nStylusMap)
@@ -2220,9 +2264,24 @@ VOID vrpn_Tracker_LibertyPDI::ParseLibertyFrame( PBYTE pBuf, DWORD dwSize, timev
 			d_quat[2] = float(pPno[6]);
 			d_quat[3] = float(pPno[3]);
 
-			// Grab the current time and create a timestamp
-			timestamp.tv_sec = current_time.tv_sec;
-			timestamp.tv_usec = current_time.tv_usec;
+			// Timestamp and framecount
+			DWORD32 frame_milisec = (*(PDWORD32)(&pBuf[dw + 4 * 7]));
+			DWORD32 frame_count = (*(PDWORD32)(&pBuf[dw + 4 * 8]));
+			if (dwLastFrameCount != frame_count) {
+				DWORD32 dropped_count = frame_count - dwLastFrameCount - 1;
+				if (dropped_count != 0) {
+					char message[256];
+					struct timeval now;
+					vrpn_gettimeofday(&now, NULL);
+					snprintf(message, sizeof message, "[vrpn_Tracker_LibertyPDI]framedropped:%d %d %d: %d frame(s) dropped.", dropped_count, dwLastFrameCount + 1, frame_count - 1, dropped_count);
+					send_text_message(message, now, vrpn_TEXT_WARNING);
+				}
+				dwLastFrameCount = frame_count;
+			}
+			timeval liberty_timestamp;
+			liberty_timestamp.tv_sec = liberty_zerotime.tv_sec + frame_milisec / 1000;
+			liberty_timestamp.tv_usec = liberty_zerotime.tv_usec + frame_milisec % 1000 * 1000;
+			timestamp = vrpn_TimevalNormalize(liberty_timestamp);
 			if (d_connection) {
 				// Pack position report
 				len = encode_to(msgbuf);

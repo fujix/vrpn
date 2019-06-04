@@ -281,6 +281,8 @@ class VRPN_API vrpn_Tracker_LibertyPDI: public vrpn_Tracker {
 	BYTE	pMotionBuf[VRPN_PDI_BUFFER_SIZE];
 	PBYTE	pLastBuf;
 	DWORD	dwLastSize;
+	DWORD	dwLastFrameCount;
+	struct timeval liberty_zerotime;  //< When the liberty time counter was zeroed
 };
 
 #endif
